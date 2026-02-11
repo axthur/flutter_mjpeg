@@ -49,6 +49,7 @@ class Mjpeg extends HookWidget {
       error;
   final Map<String, String> headers;
   final MjpegPreprocessor? preprocessor;
+  final BorderRadius? borderRadius;
 
   const Mjpeg({
     this.httpClient,
@@ -62,6 +63,7 @@ class Mjpeg extends HookWidget {
     this.loading,
     this.headers = const {},
     this.preprocessor,
+    this.borderRadius,
     Key? key,
   }) : super(key: key);
 
@@ -73,24 +75,25 @@ class Mjpeg extends HookWidget {
     final errorState = useState<List<dynamic>?>(null);
     final isMounted = useIsMounted();
     final manager = useMemoized(
-        () => _StreamManager(
-              stream,
-              isLive && visible.visible,
-              headers,
-              timeout,
-              httpClient ?? Client(),
-              preprocessor ?? MjpegPreprocessor(),
-              isMounted,
-            ),
-        [
-          stream,
-          isLive,
-          visible.visible,
-          timeout,
-          httpClient,
-          preprocessor,
-          isMounted
-        ]);
+      () => _StreamManager(
+        stream,
+        isLive && visible.visible,
+        headers,
+        timeout,
+        httpClient ?? Client(),
+        preprocessor ?? MjpegPreprocessor(),
+        isMounted,
+      ),
+      [
+        stream,
+        isLive,
+        visible.visible,
+        timeout,
+        httpClient,
+        preprocessor,
+        isMounted,
+      ],
+    );
     final key = useMemoized(() => UniqueKey(), [manager]);
 
     useEffect(() {
@@ -119,28 +122,35 @@ class Mjpeg extends HookWidget {
     }
 
     if (image.value == null) {
-      return SizedBox(
-          width: width,
-          height: height,
-          child: loading == null
-              ? Center(child: CircularProgressIndicator())
-              : loading!(context));
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius ?? BorderRadius.zero,
+        ),
+        width: width,
+        height: height,
+        child: loading != null
+            ? loading!(context)
+            : Center(child: CircularProgressIndicator()),
+      );
     }
 
     return VisibilityDetector(
       key: key,
-      child: Image(
-        image: image.value!,
-        width: width,
-        height: height,
-        gaplessPlayback: true,
-        fit: fit,
-      ),
       onVisibilityChanged: (VisibilityInfo info) {
         if (visible.mounted) {
           visible.visible = info.visibleFraction != 0;
         }
       },
+      child: ClipRRect(
+        borderRadius: borderRadius ?? BorderRadius.zero,
+        child: Image(
+          image: image.value!,
+          width: width,
+          height: height,
+          gaplessPlayback: true,
+          fit: fit,
+        ),
+      ),
     );
   }
 }
@@ -160,8 +170,15 @@ class _StreamManager {
   // ignore: cancel_subscriptions
   StreamSubscription? _subscription;
 
-  _StreamManager(this.stream, this.isLive, this.headers, this._timeout,
-      this._httpClient, this._preprocessor, this._mounted);
+  _StreamManager(
+    this.stream,
+    this.isLive,
+    this.headers,
+    this._timeout,
+    this._httpClient,
+    this._preprocessor,
+    this._mounted,
+  );
 
   Future<void> dispose() async {
     if (_subscription != null) {
@@ -171,8 +188,12 @@ class _StreamManager {
     _httpClient.close();
   }
 
-  void _sendImage(BuildContext context, ValueNotifier<MemoryImage?> image,
-      ValueNotifier<dynamic> errorState, List<int> chunks) async {
+  void _sendImage(
+    BuildContext context,
+    ValueNotifier<MemoryImage?> image,
+    ValueNotifier<dynamic> errorState,
+    List<int> chunks,
+  ) async {
     // pass image through preprocessor sending to [Image] for rendering
     final List<int>? imageData = _preprocessor.process(chunks);
     if (imageData == null) return;
@@ -184,65 +205,73 @@ class _StreamManager {
     }
   }
 
-  void updateStream(BuildContext context, ValueNotifier<MemoryImage?> image,
-      ValueNotifier<List<dynamic>?> errorState) async {
+  void updateStream(
+    BuildContext context,
+    ValueNotifier<MemoryImage?> image,
+    ValueNotifier<List<dynamic>?> errorState,
+  ) async {
     try {
       final request = Request("GET", Uri.parse(stream));
       request.headers.addAll(headers);
       final response = await _httpClient.send(request).timeout(
-          _timeout); //timeout is to prevent process to hang forever in some case
+            _timeout,
+          ); //timeout is to prevent process to hang forever in some case
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         var _carry = <int>[];
-        _subscription = response.stream.listen((chunk) async {
-          if (_carry.isNotEmpty && _carry.last == _trigger) {
-            if (chunk.first == _eoi) {
-              _carry.add(chunk.first);
-              _sendImage(context, image, errorState, _carry);
-              _carry = [];
-              if (!isLive) {
-                dispose();
+        _subscription = response.stream.listen(
+          (chunk) async {
+            if (_carry.isNotEmpty && _carry.last == _trigger) {
+              if (chunk.first == _eoi) {
+                _carry.add(chunk.first);
+                _sendImage(context, image, errorState, _carry);
+                _carry = [];
+                if (!isLive) {
+                  dispose();
+                }
               }
             }
-          }
 
-          for (var i = 0; i < chunk.length - 1; i++) {
-            final d = chunk[i];
-            final d1 = chunk[i + 1];
+            for (var i = 0; i < chunk.length - 1; i++) {
+              final d = chunk[i];
+              final d1 = chunk[i + 1];
 
-            if (d == _trigger && d1 == _soi) {
-              _carry = [];
-              _carry.add(d);
-            } else if (d == _trigger && d1 == _eoi && _carry.isNotEmpty) {
-              _carry.add(d);
-              _carry.add(d1);
-
-              _sendImage(context, image, errorState, _carry);
-              _carry = [];
-              if (!isLive) {
-                dispose();
-              }
-            } else if (_carry.isNotEmpty) {
-              _carry.add(d);
-              if (i == chunk.length - 2) {
+              if (d == _trigger && d1 == _soi) {
+                _carry = [];
+                _carry.add(d);
+              } else if (d == _trigger && d1 == _eoi && _carry.isNotEmpty) {
+                _carry.add(d);
                 _carry.add(d1);
+
+                _sendImage(context, image, errorState, _carry);
+                _carry = [];
+                if (!isLive) {
+                  dispose();
+                }
+              } else if (_carry.isNotEmpty) {
+                _carry.add(d);
+                if (i == chunk.length - 2) {
+                  _carry.add(d1);
+                }
               }
             }
-          }
-        }, onError: (error, stack) {
-          try {
-            if (_mounted()) {
-              errorState.value = [error, stack];
-              image.value = null;
-            }
-          } catch (ex) {}
-          dispose();
-        }, cancelOnError: true);
+          },
+          onError: (error, stack) {
+            try {
+              if (_mounted()) {
+                errorState.value = [error, stack];
+                image.value = null;
+              }
+            } catch (ex) {}
+            dispose();
+          },
+          cancelOnError: true,
+        );
       } else {
         if (_mounted()) {
           errorState.value = [
             HttpException('Stream returned ${response.statusCode} status'),
-            StackTrace.current
+            StackTrace.current,
           ];
           image.value = null;
         }
@@ -250,9 +279,9 @@ class _StreamManager {
       }
     } catch (error, stack) {
       // we ignore those errors in case play/pause is triggers
-      if (!error
-          .toString()
-          .contains('Connection closed before full header was received')) {
+      if (!error.toString().contains(
+            'Connection closed before full header was received',
+          )) {
         if (_mounted()) {
           errorState.value = [error, stack];
           image.value = null;

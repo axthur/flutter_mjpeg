@@ -34,10 +34,12 @@ class MyHomePage extends HookWidget {
                 error: (context, error, stack) {
                   print(error);
                   print(stack);
-                  return Text(error.toString(), style: TextStyle(color: Colors.red));
+                  return Text(error.toString(),
+                      style: TextStyle(color: Colors.red));
                 },
                 stream:
-                'http://uk.jokkmokk.jp/photo/nr4/latest.jpg', //'http://192.168.1.37:8081',
+                    'http://uk.jokkmokk.jp/photo/nr4/latest.jpg', //'http://192.168.1.37:8081',
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
           ),
