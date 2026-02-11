@@ -141,16 +141,24 @@ class Mjpeg extends HookWidget {
           visible.visible = info.visibleFraction != 0;
         }
       },
-      child: ClipRRect(
-        borderRadius: borderRadius ?? BorderRadius.zero,
-        child: Image(
-          image: image.value!,
-          width: width,
-          height: height,
-          gaplessPlayback: true,
-          fit: fit,
-        ),
-      ),
+      child: borderRadius != null
+          ? ClipRRect(
+              borderRadius: borderRadius ?? BorderRadius.zero,
+              child: Image(
+                image: image.value!,
+                width: width,
+                height: height,
+                gaplessPlayback: true,
+                fit: fit,
+              ),
+            )
+          : Image(
+              image: image.value!,
+              width: width,
+              height: height,
+              gaplessPlayback: true,
+              fit: fit,
+            ),
     );
   }
 }
