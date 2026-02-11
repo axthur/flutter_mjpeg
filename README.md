@@ -21,6 +21,7 @@ Parameter | Description
 `timeout` | HTTP Timeout when fetching the MJPEG stream
 `width` | Force width
 `height` | Force height
+`borderRadius` | Border radius to apply rounded corners to the MJPEG stream display
 `error` | Error builder used when an error occurred
 `loading` | Loading builder used until first frame arrived
 `fit` | The `boxFit` of the image
